@@ -1,7 +1,7 @@
 from django.db import models
 from django.conf import settings
 from evennia.typeclasses.models import TypedObject
-from .managers import FactionDBManager, RankManager, MemberManager
+from .managers import FactionDBManager, RankManager, MemberManager, InvitationManager
 
 
 class FactionDB(TypedObject):
@@ -11,15 +11,11 @@ class FactionDB(TypedObject):
     __defaultclasspath__ = "athanor_factions.factions.DefaultFaction"
     __applabel__ = "athanor_factions"
 
-    db_key = models.CharField("key", max_length=255, unique=True)
-    db_abbreviation = models.CharField(
-        max_length=30, unique=True, null=False, blank=True
-    )
-    db_tier = models.IntegerField(default=1, null=False)
-    db_config = models.JSONField(null=False, default=dict)
+    db_parent = models.ForeignKey("self", related_name="children", null=True, blank=True, on_delete=models.PROTECT)
+    db_deleted = models.BooleanField(default=False)
 
-    class Meta:
-        ordering = ["-db_tier", "db_key"]
+    def __str__(self):
+        return self.key
 
 
 class Rank(models.Model):
@@ -30,7 +26,17 @@ class Rank(models.Model):
     )
     name = models.CharField(max_length=255, null=False, blank=False)
     number = models.IntegerField(null=False)
-    config = models.JSONField(null=False, default=dict)
+    data = models.JSONField(null=False, default=dict)
+
+    def __repr__(self):
+        return f"<{self.faction.full_path()}'s Rank {self.number}: {self.name}>"
+
+    def serialize(self):
+        return {
+            "name": self.name,
+            "number": self.number,
+            "data": self.data,
+        }
 
     class Meta:
         ordering = ["faction", "number"]
@@ -39,15 +45,43 @@ class Rank(models.Model):
 
 class Member(models.Model):
     objects = MemberManager()
-
     character = models.ForeignKey(
-        "objects.ObjectDB", related_name="fact_ranks", on_delete=models.CASCADE
-    )
-    faction = models.ForeignKey(
-        FactionDB, related_name="members", on_delete=models.CASCADE
+        "objects.ObjectDB", related_name="faction_ranks", on_delete=models.CASCADE
     )
     rank = models.ForeignKey(Rank, related_name="holders", on_delete=models.PROTECT)
     data = models.JSONField(null=False, default=dict)
 
+    def __str__(self):
+        return str(self.character)
+
+    def __repr__(self):
+        return f"<Rank {self.rank.number} Member of {self.rank.faction.full_path()}: {self.character}>"
+
+    def serialize(self):
+        return {
+            "character": self.character.key,
+            "rank": self.rank.serialize(),
+            "data": self.data,
+        }
+
+    class Meta:
+        ordering = ["rank__faction", "rank__number", "character__db_key"]
+
+
+class Invitation(models.Model):
+    objects = InvitationManager()
+
+    character = models.ForeignKey("objects.ObjectDB", related_name="faction_invitations", on_delete=models.CASCADE)
+    faction = models.ForeignKey(FactionDB, related_name="invitations", on_delete=models.CASCADE)
+    inviter = models.ForeignKey("objects.ObjectDB", related_name="faction_invitations_extended",
+                                on_delete=models.CASCADE)
+
     class Meta:
         unique_together = (("character", "faction"),)
+
+    def serialize(self):
+        return {
+            "character": self.character.key,
+            "faction": self.faction.id,
+            "inviter": self.inviter.key,
+        }

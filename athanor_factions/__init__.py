@@ -29,7 +29,7 @@ def init(settings, plugins: dict):
     settings.FACTION_PERMISSIONS_ADMIN_MEMBERSHIP = "perm(Admin)"
 
     athanor.FACTION_ACCESS_FUNCTIONS = defaultdict(list)
-
+    settings.ACCESS_FUNCTIONS_LIST.append("FACTION")
     settings.AT_SERVER_STARTSTOP_MODULE.append("athanor_factions.startup_hooks")
 
     # This data must be convertible to JSON; "name" will be .pop()'d and
